@@ -19,6 +19,7 @@ import { probeLanguageServer } from './lsp-probe'
 async function verify(): Promise<void> {
   assert.equal(process.platform, 'linux', '镜像验收必须在 Linux 内执行')
   assert.notEqual(process.getuid!(), 0, '必须以运行时非 root 用户验证')
+  assert.equal(Bun.which('devcontainer'), null, '验收应使用正式工具路径')
   if (Bun.which('sudo')) {
     const sudo = spawnSync('sudo', ['-n', 'true'], { encoding: 'utf8', timeout: 5000 })
     assert.equal(sudo.status, 1, `免密 sudo 必须被拒绝：${sudo.error ?? sudo.stderr}`)

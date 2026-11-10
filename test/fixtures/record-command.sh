@@ -9,7 +9,9 @@ case "$command:$1" in
     devcontainer:build)
         if [ "${TEST_FAIL:-}" = features ]; then exit 31; fi
         ;;
-    docker:pull) ;;
+    docker:pull)
+        if [ "${TEST_FAIL:-}" = pull ]; then exit 30; fi
+        ;;
     docker:image)
         if [ "$2" = inspect ]; then printf '["base@sha256:fixture"]\n'; fi
         ;;

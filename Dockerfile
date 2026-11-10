@@ -59,15 +59,18 @@ ENV HOME=/home/vscode SHELL=/bin/bash
 ENV PATH="/opt/workbot-dev/bin:/opt/workbot-dev/node_modules/.bin:/opt/workbot-dev/python-tools/bin:${PATH}"
 
 FROM tools AS verification
+WORKDIR /tmp/workbot-dev-check
+COPY package.json bun.lock ./
 RUN --mount=type=cache,target=/tmp/bun-cache \
     BUN_INSTALL_CACHE_DIR=/tmp/bun-cache bun install --frozen-lockfile --ignore-scripts
 COPY . .
 RUN bun run check
 USER vscode
+WORKDIR /workspace
 # Bun 启动前隔离 HOME，避免验收依赖已有用户状态
 RUN --network=none home=$(mktemp -d) \
     && trap 'rm -rf "$home"' EXIT \
-    && HOME="$home" timeout --kill-after=5s 600s bun scripts/verify.ts
+    && HOME="$home" timeout --kill-after=5s 600s bun /tmp/workbot-dev-check/scripts/verify.ts
 
 FROM tools
 COPY --from=verification /tmp/workbot-dev-verified.json /opt/workbot-dev/verified.json

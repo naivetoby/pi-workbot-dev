@@ -38,22 +38,32 @@ function buildWithCommands(fail = ''): { status: number | null; log: string; std
 }
 
 describe('镜像构建入口', () => {
-  it('先拉取基础镜像、冻结构建 Features，再构建验收层；结束时清理临时标签', () => {
+  it('统一使用 linux/amd64 拉取和构建镜像，冻结 Features，结束时清理临时标签', () => {
     const result = buildWithCommands()
     expect(result.status).toBe(0)
     expect(result.stderr).toBe('')
     const calls = result.log.trim().split('\n')
-    expect(calls[0]).toBe('docker <pull> <mcr.microsoft.com/devcontainers/base:ubuntu24.04>')
+    expect(calls[0]).toBe(
+      'docker <pull> <--platform> <linux/amd64> <mcr.microsoft.com/devcontainers/base:ubuntu24.04>',
+    )
     expect(calls[1]).toStartWith('docker <image> <inspect>')
     expect(calls[2]).toBe(
-      'devcontainer <build> <--workspace-folder> <.> <--image-name> <pi-workbot-dev-toolchain:123> <--frozen-lockfile> <--skip-persisting-customizations-from-features>',
+      'devcontainer <build> <--workspace-folder> <.> <--image-name> <pi-workbot-dev-toolchain:123> <--platform> <linux/amd64> <--frozen-lockfile> <--skip-persisting-customizations-from-features>',
     )
     expect(calls[3]).toBe(
-      'docker <build> <--provenance=false> <--build-arg> <BASE_IMAGE=pi-workbot-dev-toolchain:123> <-t> <example.com/workbot-dev:check> <.>',
+      'docker <build> <--platform> <linux/amd64> <--provenance=false> <--build-arg> <BASE_IMAGE=pi-workbot-dev-toolchain:123> <-t> <example.com/workbot-dev:check> <.>',
     )
     expect(calls[4]).toBe('docker <image> <rm> <pi-workbot-dev-toolchain:123>')
     expect(calls).toHaveLength(5)
     expect(result.log).not.toContain('<push>')
+  })
+
+  it('基础镜像拉取失败时保留错误码，停止后续构建并清理临时标签', () => {
+    const result = buildWithCommands('pull')
+    expect(result.status).toBe(30)
+    expect(result.log).not.toContain('devcontainer <build>')
+    expect(result.log).not.toContain('docker <build>')
+    expect(result.log.trim()).toEndWith('docker <image> <rm> <pi-workbot-dev-toolchain:123>')
   })
 
   it('Features 构建失败时保留错误码、不构建或发布最终镜像，仍清理临时标签', () => {
@@ -110,7 +120,9 @@ describe('环境边界', () => {
   it('最终镜像依赖禁网非 root 验收，不包含 Pi 或构建 CLI，不设置角色安装策略', () => {
     const dockerfile = readFileSync(join(root, 'Dockerfile'), 'utf8')
     expect(dockerfile).toContain('RUN --network=none')
-    expect(dockerfile).toContain('HOME="$home" timeout --kill-after=5s 600s bun scripts/verify.ts')
+    expect(dockerfile).toContain(
+      'HOME="$home" timeout --kill-after=5s 600s bun /tmp/workbot-dev-check/scripts/verify.ts',
+    )
     expect(dockerfile).toContain('COPY --from=verification /tmp/workbot-dev-verified.json')
     expect(dockerfile).toContain('test ! -e node_modules/pi-lens/package.json')
     expect(dockerfile).toContain('test ! -e node_modules/@devcontainers/cli/package.json')
@@ -130,15 +142,17 @@ describe('环境边界', () => {
     const verification = dockerfile
       .split('FROM tools AS verification')[1]!
       .split('FROM tools\n')[0]!
+    expect(verification).toContain('WORKDIR /tmp/workbot-dev-check\nCOPY package.json bun.lock ./')
+    expect(verification).toContain('USER vscode\nWORKDIR /workspace')
     expect(verification.indexOf('USER vscode')).toBeGreaterThan(-1)
     expect(verification.indexOf('USER vscode')).toBeLessThan(
       verification.indexOf('RUN --network=none'),
     )
   })
 
-  it('格式检查只排除安装的 Python 工具，不排除源码和验收脚本', () => {
+  it('源码格式检查使用统一规则', () => {
     const config = JSON.parse(readFileSync(join(root, '.oxfmtrc.json'), 'utf8'))
-    expect(config.ignorePatterns).toEqual(['python-tools/**'])
+    expect(config.ignorePatterns).toBeUndefined()
   })
 
   it('GitHub CI 验收后才登录和发布，仅 main 可推送，PR 不接触凭证', () => {
