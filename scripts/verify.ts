@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -52,6 +53,7 @@ async function verify(): Promise<void> {
     ['rust-analyzer', ['--version']],
     ['rustfmt', ['--version']],
     ['cargo-clippy', ['--version']],
+    ['git-lfs', ['version']],
     ['gh', ['--version']],
     ['glab', ['--version']],
     ['yq', ['--version']],
@@ -76,6 +78,30 @@ async function verify(): Promise<void> {
   }
   assert.match(versions.node!, /^v24\./)
   assert.match(versions.javac!, /^javac 21\./)
+  const goVersion = execFileSync('go', ['env', 'GOVERSION'], {
+    encoding: 'utf8',
+    timeout: 5000,
+  }).trim()
+  for (const command of ['gopls', 'git-lfs', 'shfmt']) {
+    const binary = `/usr/local/bin/${command}`
+    assert.equal(Bun.which(command), binary, `${command} 应使用镜像内编译的版本`)
+    assert.equal(
+      execFileSync('go', ['version', binary], { encoding: 'utf8', timeout: 5000 }).trim(),
+      `${binary}: ${goVersion}`,
+      `${command} 必须使用当前 Go 工具链编译`,
+    )
+    versions[`${command}-go`] = goVersion
+  }
+  for (const command of ['git-lfs', 'shfmt'])
+    assert(!existsSync(`/usr/bin/${command}`), `残留发行版旧二进制：${command}`)
+  versions['linux-libc-dev'] = execFileSync(
+    'dpkg-query',
+    ['-W', '-f=${Version}', 'linux-libc-dev'],
+    { encoding: 'utf8', timeout: 5000 },
+  ).trim()
+  execFileSync('dpkg', ['--compare-versions', versions['linux-libc-dev'], 'ge', '6.8.0-149.149'], {
+    timeout: 5000,
+  })
   execFileSync('gh', ['api', '--help'], { timeout: 15_000 })
   execFileSync('glab', ['api', '--help'], { timeout: 15_000 })
   execFileSync('jdtls', ['--help'], { timeout: 15_000 })
@@ -225,6 +251,28 @@ async function verify(): Promise<void> {
       'PASS Rust: compile error, corrected execution, rustfmt and Clippy without downloads',
     )
 
+    const lfs = join(root, 'lfs-check')
+    execFileSync('git', ['init', '--quiet', lfs], { timeout: 5000 })
+    execFileSync('git', ['lfs', 'install', '--local'], { cwd: lfs, timeout: 5000 })
+    const payload = 'workbot-lfs-check\n'
+    const pointer = execFileSync('git', ['lfs', 'clean', '--', 'sample.bin'], {
+      cwd: lfs,
+      input: payload,
+      encoding: 'utf8',
+      timeout: 5000,
+    })
+    assert(pointer.includes(`oid sha256:${createHash('sha256').update(payload).digest('hex')}`))
+    assert.equal(
+      execFileSync('git', ['lfs', 'smudge', '--', 'sample.bin'], {
+        cwd: lfs,
+        input: pointer,
+        encoding: 'utf8',
+        timeout: 5000,
+      }),
+      payload,
+    )
+    console.log('PASS Git LFS: clean and smudge round-trip without downloads')
+
     const yaml = join(cwd, 'sample.yaml')
     writeFileSync(yaml, 'value: 42\n')
     assert.equal(
@@ -250,6 +298,7 @@ async function verify(): Promise<void> {
       'stylelint.json': '{"rules":{"color-no-invalid-hex":true}}',
       'bad.py': 'import os\n',
       'bad.sh': '#!/bin/sh\necho $value\n',
+      'unformatted.sh': '#!/bin/sh\nif true;then echo ok;fi\n',
     }))
       writeFileSync(join(cwd, file), content)
 
@@ -269,6 +318,7 @@ async function verify(): Promise<void> {
       ['tsc', ['--noEmit', '--skipLibCheck', '--pretty', 'false', 'bad.ts'], 2, 'TS2322'],
       ['ruff', ['check', '--isolated', 'bad.py'], 1, 'F401'],
       ['shellcheck', ['bad.sh'], 1, 'SC2086'],
+      ['shfmt', ['-d', 'unformatted.sh'], 1, '+if true; then'],
     ] as const) {
       const result = spawnSync(command, [...args], { cwd, encoding: 'utf8', timeout: 30_000 })
       const output = result.stdout + result.stderr

@@ -206,6 +206,21 @@ describe('环境边界', () => {
     }
   })
 
+  it('移除旧 Go 二进制，固定源码版本重新编译，并显式更新开发头文件', () => {
+    const dockerfile = readFileSync(join(root, 'Dockerfile'), 'utf8')
+    const packages = (dockerfile.match(/apt-get install\s+([\s\S]*?)&&/)?.[1] ?? '').split(/\s+/)
+    expect(packages).toContain('linux-libc-dev')
+    expect(packages).not.toContain('git-lfs')
+    expect(packages).not.toContain('shfmt')
+    expect(dockerfile).toContain('apt-get purge -y git-lfs shfmt')
+    expect(dockerfile).toContain('GOTOOLCHAIN=local')
+    expect(dockerfile).toMatch(/go install -trimpath mvdan\.cc\/sh\/v3\/cmd\/shfmt@v\d+\.\d+\.\d+/)
+    expect(dockerfile).toMatch(
+      /go install -trimpath github\.com\/git-lfs\/git-lfs\/v3@v\d+\.\d+\.\d+/,
+    )
+    expect(dockerfile).toContain('git-lfs install --system --skip-repo')
+  })
+
   it('官方发布包固定版本并校验 SHA-256，不加入镜像加速或 LuaLS', () => {
     const dockerfile = readFileSync(join(root, 'Dockerfile'), 'utf8')
     const downloads = [...dockerfile.matchAll(/ADD ([^\n]+)\\\n\s*(https:\/\/\S+) \S+/g)]

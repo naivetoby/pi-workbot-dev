@@ -27,12 +27,14 @@ FROM ${BASE_IMAGE} AS tools
 USER root
 ENV TZ=Asia/Shanghai
 RUN --mount=type=bind,from=downloads,source=/packages,target=/tmp/packages \
-    apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    apt-get update \
+    && apt-get purge -y git-lfs shfmt \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     /tmp/packages/gh.deb /tmp/packages/glab.deb \
-    bash ca-certificates curl git git-lfs jq ripgrep fd-find \
+    bash ca-certificates curl git jq ripgrep fd-find \
     gettext-base openssh-client perl rsync tzdata zip unzip xz-utils \
     file less procps lsof strace dnsutils netcat-openbsd \
-    build-essential cmake pkg-config shellcheck shfmt clangd cppcheck \
+    build-essential linux-libc-dev cmake pkg-config shellcheck clangd cppcheck \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
@@ -47,9 +49,15 @@ COPY --chmod=755 scripts/jdtls.sh /usr/local/bin/jdtls
 RUN python3 -m venv /opt/workbot-dev/python-tools \
     && /opt/workbot-dev/python-tools/bin/pip install --no-cache-dir --only-binary=:all: \
     ruff==0.17.4 cmake-language-server==0.1.11 pygls==1.3.1
+# Go 工具使用镜像工具链编译，统一更新内嵌标准库
 RUN --mount=type=cache,target=/tmp/gopath --mount=type=cache,target=/tmp/go-build \
-    GOBIN=/usr/local/bin GOPATH=/tmp/gopath GOCACHE=/tmp/go-build GOTOOLCHAIN=local \
-    go install golang.org/x/tools/gopls@v0.24.0
+    export GOBIN=/usr/local/bin GOPATH=/tmp/gopath GOCACHE=/tmp/go-build GOTOOLCHAIN=local \
+    && go install golang.org/x/tools/gopls@v0.24.0 \
+    && go install -trimpath mvdan.cc/sh/v3/cmd/shfmt@v3.14.1 \
+    && go install -trimpath github.com/git-lfs/git-lfs/v3@v3.8.1 \
+    && install -Dm644 /tmp/gopath/pkg/mod/mvdan.cc/sh/v3@v3.14.1/LICENSE /usr/share/doc/shfmt/LICENSE \
+    && install -Dm644 /tmp/gopath/pkg/mod/github.com/git-lfs/git-lfs/v3@v3.8.1/LICENSE.md /usr/share/doc/git-lfs/LICENSE.md \
+    && git-lfs install --system --skip-repo
 
 WORKDIR /opt/workbot-dev
 COPY package.json bun.lock ./
