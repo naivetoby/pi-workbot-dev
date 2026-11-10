@@ -1,0 +1,16 @@
+**
+!Dockerfile
+!package.json
+!bun.lock
+!tsconfig.json
+!.oxfmtrc.json
+!.devcontainer/
+!.devcontainer/**
+!scripts/
+!scripts/**
+!test/
+!test/**
+!.github/
+!.github/workflows/
+!.github/workflows/**
+!README.md

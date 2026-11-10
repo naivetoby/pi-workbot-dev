@@ -1,0 +1,30 @@
+{
+  "name": "Workbot shared toolchain",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu24.04",
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "24",
+      "nodeGypDependencies": true
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12",
+      "installTools": false
+    },
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "21",
+      "additionalVersions": "25",
+      "jdkDistro": "tem",
+      "installMaven": true
+    },
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.27.3",
+      "installGoTools": false
+    },
+    "ghcr.io/devcontainers/features/rust:1": {
+      "version": "1.99.1",
+      "profile": "minimal",
+      "components": "rust-analyzer,rust-src,rustfmt,clippy"
+    }
+  }
+}

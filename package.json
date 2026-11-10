@@ -1,0 +1,38 @@
+{
+  "name": "pi-workbot-dev",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bash scripts/build.sh",
+    "features:update": "devcontainer upgrade --workspace-folder .",
+    "check": "oxfmt --check . && oxlint --deny-warnings scripts test && tsc --noEmit && bun test && bash -n scripts/build.sh scripts/jdtls.sh",
+    "format": "oxfmt --write .",
+    "verify": "bun scripts/verify.ts"
+  },
+  "dependencies": {
+    "@ast-grep/cli": "0.51.1",
+    "bash-language-server": "5.8.1",
+    "dockerfile-language-server-nodejs": "0.15.0",
+    "htmlhint": "1.9.2",
+    "markdownlint-cli2": "0.24.0",
+    "oxfmt": "0.78.0",
+    "oxlint": "1.93.0",
+    "prettier": "3.9.10",
+    "pyright": "1.1.414",
+    "stylelint": "18.0.0",
+    "svelte-language-server": "0.18.6",
+    "typescript": "6.0.3",
+    "typescript-language-server": "6.0.3",
+    "vscode-langservers-extracted": "4.10.0",
+    "yaml-language-server": "2.0.0"
+  },
+  "devDependencies": {
+    "@devcontainers/cli": "0.90.0",
+    "@types/bun": "1.4.4",
+    "vscode-jsonrpc": "10.0.0"
+  },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  }
+}
